@@ -1,16 +1,28 @@
 import os
+import sys
 import time
 import json
 import pygame
 import random
 import wave
+import platform
 
 # ================= PATHS =================
-BASE_DIR = os.path.dirname(__file__)
+def resource_path(rel_path):
+    """Works both in dev and PyInstaller onefile exe"""
+    try:
+        base = getattr(sys, "_MEIPASS")
+    except AttributeError:
+        base = os.path.abspath(".")
+    return os.path.join(base, rel_path)
+
+# Assets inside exe
+STATIC_WAV = resource_path("assets/static.wav")
+STATE_FILE = resource_path("state.json")
+
+# Audios always external (beside exe)
+BASE_DIR = os.path.dirname(os.path.abspath(sys.argv[0]))
 AUDIOS_DIR = os.path.join(BASE_DIR, "Audios")
-ASSETS_DIR = os.path.join(BASE_DIR, "assets")
-STATE_FILE = os.path.join(BASE_DIR, "state.json")
-NOISE_FILE = os.path.join(ASSETS_DIR, "static.wav")
 
 # ================= INIT =================
 pygame.mixer.init()
@@ -39,6 +51,9 @@ def get_wav_duration(path):
         return frames / float(rate)
 
 def load_radios():
+    if not os.path.exists(AUDIOS_DIR):
+        raise FileNotFoundError(f"{AUDIOS_DIR} not found. Place your game audio folders here.")
+
     for game in os.listdir(AUDIOS_DIR):
         game_path = os.path.join(AUDIOS_DIR, game)
         if not os.path.isdir(game_path):
@@ -67,7 +82,7 @@ current_game = None
 current_station = None
 
 def play_noise():
-    noise = pygame.mixer.Sound(NOISE_FILE)
+    noise = pygame.mixer.Sound(STATIC_WAV)
     noise.play()
     pygame.time.delay(random.randint(300, 600))
 
@@ -89,7 +104,7 @@ def play_station(game, station):
     current_game = game
     current_station = station
 
-    print(f"▶ {game} / {station} @ {int(offset)}s")
+    print(f"▶ {game} / {station}")  # offset now hidden
 
 def save_state():
     state["last"]["game"] = current_game
@@ -97,11 +112,19 @@ def save_state():
     with open(STATE_FILE, "w", encoding="utf-8") as f:
         json.dump(state, f, indent=2)
 
+# ================= TERMINAL CLEAR =================
+def clear_terminal():
+    if platform.system() == "Windows":
+        os.system("cls")
+    else:
+        os.system("clear")
+
 # ================= CLI =================
 def main_menu():
     games = list(radios.keys())
 
     while True:
+        clear_terminal()
         print("\nGames:")
         for i, g in enumerate(games):
             print(f"{i} - {g}")
@@ -114,16 +137,13 @@ def main_menu():
 
         try:
             game = games[int(gsel)]
-
-        except ValueError:
-            print("enter a number or q")
-            continue
-        except IndexError:
-            print("invalid index")
+        except (ValueError, IndexError):
+            print("Invalid input")
             continue
         
-        stations = list(radios[game].keys())
         while True:
+            clear_terminal()
+            stations = list(radios[game].keys())
             print(f"\nStations ({game}):")
             for i, s in enumerate(stations):
                 print(f"{i} - {s}")
@@ -136,7 +156,7 @@ def main_menu():
             try:
                 station = stations[int(ssel)]
                 play_station(game, station)
-            except:
+            except (ValueError, IndexError):
                 continue
 
 # ================= AUTO RESUME =================
@@ -144,7 +164,7 @@ last = state.get("last", {})
 if last.get("game") and last.get("station"):
     try:
         play_station(last["game"], last["station"])
-    except:
+    except Exception:
         pass
 
 main_menu()
